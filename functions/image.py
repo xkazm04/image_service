@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models.models import Image
+from models.models import Image, Variants
 from fastapi import HTTPException
 from uuid import UUID
 
@@ -39,6 +39,16 @@ def save_image(
     db.add(image)
     db.commit()
     db.refresh(image)
+    
+    variant = Variants(
+        id=id,  
+        is_primary=True,
+        image_id=image.internal_id, 
+        type="main"
+    )
+    db.add(variant)
+    db.commit()
+    db.refresh(variant)
     return image
 
 def get_image_tags(image):

@@ -82,7 +82,28 @@ def remove_background_api(image_id: str):
     payload = {
         "id": image_id,
     }
+    response = requests.post(url, json=payload, headers=HEADERS)
+    response.raise_for_status()
+    data = response.json()
+    return data
 
+def upscale_api(image_id: str):
+    """Remove the background from an image."""
+    url = f"{LEONARDO_API_BASE_URL}/variations/upscale"
+    payload = {
+        "id": image_id,
+    }
+    response = requests.post(url, json=payload, headers=HEADERS)
+    response.raise_for_status()
+    data = response.json()
+    return data
+
+def unzoom_api(image_id: str):
+    """Unzoom an image."""
+    url = f"{LEONARDO_API_BASE_URL}/variations/unzoom"
+    payload = {
+        "id": image_id,
+    }
     response = requests.post(url, json=payload, headers=HEADERS)
     response.raise_for_status()
     data = response.json()

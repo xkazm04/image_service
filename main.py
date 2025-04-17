@@ -11,6 +11,7 @@ import time
 import json
 from routes import api_router
 from functions.celery import long_running_task, celery_app
+from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,7 +36,13 @@ app = FastAPI(
 )
 
 app.include_router(api_router, prefix="", tags=["Images"])
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 Instrumentator().instrument(app).expose(app)
 
 @app.middleware("http")

@@ -65,7 +65,7 @@ def get_images_by_project_id_endpoint(project_id: UUID, db: Session = Depends(ge
     return images if images else []
 
 
-@router.get("/{image_id}")
+@router.get("/id/{image_id}")
 def get_image_by_id_endpoint(image_id: str, db: Session = Depends(get_db)):
     image = get_image_by_id(db, image_id)
     if not image:

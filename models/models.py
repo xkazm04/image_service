@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String
+from sqlalchemy import Column, String, ForeignKey, Boolean
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
@@ -27,4 +28,16 @@ class Image(Base):
     project_id = Column(UUID(as_uuid=True), nullable=False)
     type = Column(String, nullable=True)
     tags = Column(String, nullable=True)
+    
+    variants = relationship("Variants", back_populates="image")
 
+class Variants(Base):
+    __tablename__ = "variants"
+
+    id = Column(String, primary_key=True)
+    image_id = Column(UUID(as_uuid=True), ForeignKey("images.internal_id"), nullable=False)
+    is_primary = Column(Boolean, nullable=False) 
+    type = Column(String, nullable=False)
+    predecessor_id = Column(String, nullable=True)
+    
+    image = relationship("Image", back_populates="variants")
