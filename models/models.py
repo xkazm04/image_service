@@ -5,15 +5,6 @@ from sqlalchemy.ext.declarative import declarative_base
 import uuid
 
 Base = declarative_base()
-
-
-class Generation(Base):
-    __tablename__ = "generations"
-
-    id = Column(String, primary_key=True)
-    project_id = Column(UUID(as_uuid=True), nullable=False)
-    assigned_scene = Column(UUID(as_uuid=True), nullable=True)
-    
      
 class Image(Base):
     __tablename__ = "images"
@@ -26,9 +17,11 @@ class Image(Base):
     prompt_scenery = Column(String, nullable=True)
     prompt_actor = Column(String, nullable=True)
     project_id = Column(UUID(as_uuid=True), nullable=False)
+    saved = Column(Boolean, nullable=True, default=False)
     type = Column(String, nullable=True)
     tags = Column(String, nullable=True)
-    
+    generation_id = Column(String, nullable=True)
+
     variants = relationship("Variants", back_populates="image")
 
 class Variants(Base):

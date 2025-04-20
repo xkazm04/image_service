@@ -44,6 +44,41 @@ def create_generation(
         logging.error("Error calling Leonardo API: %s", e)
         raise
 
+def sketch_api(prompt: str):
+    """Generate a sketch using the Leonardo API."""
+    url = f"{LEONARDO_API_BASE_URL}/generations"
+    payload = {
+        "alchemy": True,
+        "height": 250,
+        "width": 250,
+        "modelId": "de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3",
+        "presetStyle": "SKETCH_BW",
+        "prompt": prompt,
+        "num_images": 1,
+    }
+    try:
+        logging.debug("Calling Leonardo API with payload: %s", payload)
+        response = requests.post(url, json=payload, headers=HEADERS)
+        response.raise_for_status()
+        data = response.json()
+        logging.info("Sketch generated successfully.")
+        return data
+    except requests.exceptions.RequestException as e:
+        logging.error("Error calling Leonardo API: %s", e)
+        raise
+
+def delete_generation_api(generation_id: str):
+    """Delete a generation by its ID."""
+    url = f"{LEONARDO_API_BASE_URL}/generations/{generation_id}"
+    try:
+        response = requests.delete(url, headers=HEADERS)
+        response.raise_for_status()
+        logging.info("Generation deleted successfully.")
+    except requests.exceptions.RequestException as e:
+        logging.error("Error deleting generation: %s", e)
+        raise
+
+
 def get_generation(generation_id: str):
     """Retrieve generated images based on generation_id."""
     url = f"{LEONARDO_API_BASE_URL}/generations/{generation_id}"

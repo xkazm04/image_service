@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from models.models import Image, Variants
 from fastapi import HTTPException
 from uuid import UUID
+from functions.leonardo import delete_generation_api
 
 def delete_image(db: Session, image_id: str):
     image = get_image_by_id(db, image_id)
@@ -26,6 +27,7 @@ def save_image(
         prompt_artstyle: str = None, 
         prompt_scenery: str = None,
         prompt_actor: str = None,
+        generation_id: str = None,
         type: str = "gen"):
     image = Image(
         id=id,
@@ -34,6 +36,8 @@ def save_image(
         prompt_scenery=prompt_scenery,
         prompt_actor=prompt_actor,
         url=url,
+        saved=True,
+        generation_id=generation_id,
         type=type
     )
     db.add(image)
@@ -50,6 +54,18 @@ def save_image(
     db.commit()
     db.refresh(variant)
     return image
+
+def delete_unsaved_images(db: Session):
+    images = db.query(Image).filter(Image.saved == False).all()
+    for image in images:
+        if image.generation_id:
+            try:
+                delete_generation_api(image.generation_id)
+                db.delete(image)
+            except Exception as e:
+                print(f"Error deleting generation {image.generation_id}: {e}")
+    db.commit()
+
 
 def get_image_tags(image):
     """Convert image tags from string to list format"""
