@@ -1,7 +1,7 @@
 
 import logging
 from fastapi import APIRouter, HTTPException
-from functions.leonardo import remove_background_api, get_varation_by_id, upscale_api
+from services.leo_variation import remove_background_api, get_varation_by_id, upscale_api
 from pydantic import BaseModel
 from celery_config import monitor_background_removal
 router = APIRouter(tags=["Variants"])

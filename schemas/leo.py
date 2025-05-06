@@ -20,3 +20,10 @@ class GenerationRequest(BaseModel):
     width: int = 512
     num_images: int = 4
     preset_style: str = "DYNAMIC"
+    
+class GenVideoRequest(BaseModel):
+    imageId: str
+    imageType: str = "GENERATED"
+    prompt: str = "The scene gradually comes to life with subtle movement, light shifts, and ambient motion."
+    promptEnhance: bool = True
+    

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import time
 import json
 from routes import api_router
-from functions.celery import long_running_task, celery_app
+from services.celery import long_running_task, celery_app
 from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(

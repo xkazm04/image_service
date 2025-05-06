@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from functions.image import get_image_by_id, get_images_by_scene_id, save_image
+from services.image import get_image_by_id, get_images_by_scene_id, save_image
 from schemas.image import ImageSchema, ImageSceneAssignSchema, ImageResponse, ImageTagSchema, ImageTagsUpdateResponse
 from models.models import Image
 from database import get_db

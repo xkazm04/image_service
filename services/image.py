@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from models.models import Image, Variants
 from fastapi import HTTPException
 from uuid import UUID
-from functions.leonardo import delete_generation_api
+from services.leo_common import delete_generation_api
 
 def delete_image(db: Session, image_id: str):
     image = get_image_by_id(db, image_id)

@@ -1,13 +1,14 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from functions.leonardo import create_generation, get_generation, improve_prompt_api, sketch_api, delete_generation_api
+from fastapi import APIRouter, HTTPException, Depends
+from services.leo_common import get_generation, improve_prompt_api, delete_generation_api
+from services.leo_image import create_generation,  poll_all_generations
+from services.leo_video import create_video_generation
 import asyncio
 from pydantic import BaseModel
-from schemas.leo import GenerateAndSaveRequest, GenerationRequest
-from celery_config import monitor_background_removal
-from functions.image import save_image
+from schemas.leo import GenerateAndSaveRequest, GenerationRequest, GenVideoRequest
+from services.image import save_image
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 router = APIRouter(tags=["Leo"])
 from database import get_db
 
@@ -16,7 +17,8 @@ from database import get_db
 @router.get("/")
 async def root():
     return {"message": "Welcome to the Leonardo API"}
-    
+
+# Generate image
 @router.post("/generate")
 async def generate_and_poll_images(request: GenerationRequest):
     try:
@@ -30,23 +32,45 @@ async def generate_and_poll_images(request: GenerationRequest):
         )
         generation_id = create_response["sdGenerationJob"]["generationId"]
 
-        # Poll for generated images with increased efficiency
-        for attempt in range(10):  # Poll for up to 10 attempts
+        for attempt in range(10):  
             try:
                 images = get_generation(generation_id)
-                if images:  # If images are available, return them immediately
+                if images:  
                     logging.info(f"Images found after {attempt + 1} attempts.")
-                    return {"status": "success", "data": images}
+                    return {"status": "success", "data": images, "gen": generation_id}
             except Exception as e:
-                # Log polling failures once per attempt
                 logging.warning(f"Polling attempt {attempt + 1} failed: {e}")
 
             await asyncio.sleep(5)  # Wait 5 seconds before polling again
 
-        # If no images are available after polling, return an error
         raise HTTPException(status_code=408, detail="Image generation timed out.")
     except Exception as e:
         logging.error(f"Error in generate_and_poll_images: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# Generate video
+@router.post("/generate-video")
+async def generate_video(request: GenVideoRequest):
+    try:
+        create_response = create_video_generation(
+            prompt=request.prompt,
+            image_id=request.imageId,
+            image_type=request.imageType,
+        )
+        generation_id = create_response["motionVideoGenerationJob"]["generationId"]
+        for attempt in range(10): 
+            try:
+                videos = get_generation(generation_id)
+                if videos:  
+                    logging.info(f"Videos found after {attempt + 1} attempts.")
+                    return {"status": "success", "data": videos, "gen": generation_id}
+            except Exception as e:
+                logging.warning(f"Polling attempt {attempt + 1} failed: {e}")
+
+            await asyncio.sleep(20)  
+        raise HTTPException(status_code=408, detail="Video generation timed out.")
+    except Exception as e:
+        logging.error(f"Error in generate_video: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 # New endpoint for parallel generation of multiple images
@@ -96,42 +120,7 @@ async def generate_batch_images(request: BatchGenerationRequest):
         logging.error(f"Error in generate_batch_images: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-async def poll_all_generations(generation_ids):
-    """Poll for multiple generations concurrently"""
-    poll_tasks = []
-    
-    for gen in generation_ids:
-        poll_tasks.append(poll_single_generation(gen["id"], gen["prompt"]))
-        
-    results = await asyncio.gather(*poll_tasks, return_exceptions=True)
-    
-    # Filter out any error results
-    valid_results = []
-    for result in results:
-        if isinstance(result, Exception):
-            logging.error(f"Generation error: {result}")
-        else:
-            valid_results.append(result)
-            
-    return valid_results
 
-async def poll_single_generation(generation_id: str, prompt: str):
-    """Poll for a single generation with timeout"""
-    for attempt in range(10):
-        try:
-            images = get_generation(generation_id)
-            if images:
-                # Add the prompt to the response for client-side matching
-                for img in images:
-                    img["prompt"] = prompt
-                logging.info(f"Images for '{prompt[:30]}...' found after {attempt + 1} attempts")
-                return images
-        except Exception as e:
-            logging.warning(f"Polling attempt {attempt + 1} for ID {generation_id} failed: {e}")
-        
-        await asyncio.sleep(5)
-    
-    raise Exception(f"Generation timed out for ID {generation_id}")
 
 # Generate and save to project
 @router.post("/")

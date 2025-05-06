@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 import logging
 from database import get_db
-from functions.leonardo import get_varation_by_id, save_processed_image_url
+from services.leo_variation import get_varation_by_id, save_processed_image_url
 import time
 
 load_dotenv()

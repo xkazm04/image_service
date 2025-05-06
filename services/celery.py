@@ -1,7 +1,7 @@
 from celery import Celery
 import os
 from database import SessionLocal # Import SessionLocal
-from functions.image import delete_unsaved_images # Import the function
+from services.image import delete_unsaved_images # Import the function
 
 # Create Celery app with memory broker for testing
 celery_app = Celery(
