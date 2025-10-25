@@ -1,12 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from services.image import get_image_by_id, get_images_by_scene_id, save_image
 from schemas.image import ImageSchema, ImageSceneAssignSchema, ImageResponse, ImageTagSchema, ImageTagsUpdateResponse
-from models.models import Image
+from models.models import Image, Project
 from database import get_db
+from utils.storage import LocalStorage
 from uuid import UUID
 import logging
+import os
+from pathlib import Path
+
 router = APIRouter(tags=["Images"])
+storage = LocalStorage()
+logger = logging.getLogger(__name__)
 
 @router.post("/")
 def save_image_endpoint(image: ImageSchema, db: Session = Depends(get_db)):
@@ -48,12 +55,16 @@ def assign_scene_to_image_endpoint(payload: ImageSceneAssignSchema, db: Session 
 # Get images by project
 @router.get("/project/{project_id}")
 def get_images_by_project_id_endpoint(project_id: UUID, db: Session = Depends(get_db)):
-    logging.info(f"Getting images for project {project_id}")
-    images = db.query(Image).filter(Image.project_id == project_id).all()
-    logging.info(f"Found {len(images)} images")
+    logger.info(f"Getting images for project {project_id}")
+    images = db.query(Image).filter(
+        Image.project_id == project_id,
+        Image.status == "active"
+    ).all()
+    logger.info(f"Found {len(images)} images")
     
-    # Convert tags to lists for all images
+    # Convert tags to lists and ensure local URLs are available
     for image in images:
+        # Handle tags
         if image.tags:
             if ',' in image.tags:
                 image.tags = [tag.strip() for tag in image.tags.split(',')]
@@ -61,6 +72,10 @@ def get_images_by_project_id_endpoint(project_id: UUID, db: Session = Depends(ge
                 image.tags = [image.tags.strip()]
         else:
             image.tags = []
+        
+        # Ensure local_url is set for serving images
+        if not image.local_url and image.local_path:
+            image.local_url = storage.get_image_url(str(project_id), image.id)
     
     return images if images else []
 
@@ -94,9 +109,17 @@ def delete_image_endpoint(image_id: str, db: Session = Depends(get_db)):
     image = get_image_by_id(db, image_id)
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-    db.delete(image)
+    
+    # Delete local file
+    if image.project_id:
+        storage.delete_image(str(image.project_id), image_id)
+    
+    # Mark as deleted instead of hard delete (for data integrity)
+    image.status = "deleted"
     db.commit()
-    return image
+    db.refresh(image)
+    
+    return {"message": "Image deleted successfully", "id": image_id}
 
 @router.post("/tag", response_model=ImageTagsUpdateResponse)
 def add_tag_to_image_endpoint(payload: ImageTagSchema, db: Session = Depends(get_db)):
@@ -175,3 +198,66 @@ def get_image_tags_endpoint(image_id: str, db: Session = Depends(get_db)):
         "id": image.id,
         "tags": tags
     }
+
+# New routes for local file serving and project management
+
+@router.get("/storage/{project_id}/{filename}")
+def serve_local_image(project_id: str, filename: str):
+    """Serve local image files"""
+    try:
+        file_path = storage.get_project_path(project_id) / filename
+        
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="Image file not found")
+        
+        return FileResponse(
+            path=file_path,
+            media_type="image/*",
+            filename=filename
+        )
+    except Exception as e:
+        logger.error(f"Error serving image {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Error serving image")
+
+@router.get("/projects/{project_id}/stats")
+def get_project_stats(project_id: UUID, db: Session = Depends(get_db)):
+    """Get statistics for a project"""
+    try:
+        # Database stats
+        total_images = db.query(Image).filter(
+            Image.project_id == project_id,
+            Image.status == "active"
+        ).count()
+        
+        # Local storage stats
+        local_images = storage.list_project_images(str(project_id))
+        
+        return {
+            "project_id": str(project_id),
+            "total_images_db": total_images,
+            "total_images_local": len(local_images),
+            "local_storage_path": str(storage.get_project_path(str(project_id)))
+        }
+    except Exception as e:
+        logger.error(f"Error getting project stats: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving project stats")
+
+@router.get("/storage/stats")
+def get_storage_stats():
+    """Get overall storage statistics"""
+    try:
+        stats = storage.get_storage_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting storage stats: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving storage stats")
+
+@router.post("/storage/cleanup")
+def cleanup_storage():
+    """Clean up empty directories and orphaned files"""
+    try:
+        storage.cleanup_empty_directories()
+        return {"message": "Storage cleanup completed"}
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+        raise HTTPException(status_code=500, detail="Error during storage cleanup")

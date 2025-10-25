@@ -4,7 +4,11 @@ from dotenv import load_dotenv
 import logging
 import asyncio
 from services.leo_common import get_generation
+from utils.storage import LocalStorage
+import uuid
+
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -18,6 +22,9 @@ HEADERS = {
     "Authorization": f"Bearer {LEONARDO_API_KEY}",
     "Content-Type": "application/json",
 }
+
+# Initialize local storage
+storage = LocalStorage()
 
 def create_generation(
         prompt: str, 
@@ -89,20 +96,73 @@ async def poll_all_generations(generation_ids):
             
     return valid_results
 
-async def poll_single_generation(generation_id: str, prompt: str):
-    """Poll for a single generation with timeout"""
+async def poll_single_generation(generation_id: str, prompt: str, project_id: str = None):
+    """Poll for a single generation with timeout and save images locally"""
     for attempt in range(10):
         try:
             images = get_generation(generation_id)
             if images:
-                # Add the prompt to the response for client-side matching
-                for img in images:
-                    img["prompt"] = prompt
-                logging.info(f"Images for '{prompt[:30]}...' found after {attempt + 1} attempts")
+                # Download and save images locally if project_id is provided
+                if project_id:
+                    for img in images:
+                        image_id = img["id"]
+                        image_url = img["url"]
+                        
+                        # Download and save the image locally
+                        local_path = storage.download_and_save_image(
+                            image_url, project_id, image_id
+                        )
+                        
+                        if local_path:
+                            # Update the URL to point to local file
+                            img["local_path"] = local_path
+                            img["local_url"] = storage.get_image_url(project_id, image_id)
+                        
+                        img["prompt"] = prompt
+                
+                logger.info(f"Images for '{prompt[:30]}...' found after {attempt + 1} attempts")
                 return images
         except Exception as e:
-            logging.warning(f"Polling attempt {attempt + 1} for ID {generation_id} failed: {e}")
+            logger.warning(f"Polling attempt {attempt + 1} for ID {generation_id} failed: {e}")
         
         await asyncio.sleep(5)
     
     raise Exception(f"Generation timed out for ID {generation_id}")
+
+def generate_and_save_locally(
+    prompt: str,
+    project_id: str,
+    height: int = 512,
+    width: int = 512,
+    model: str = "de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3",
+    num_images: int = 4,
+    preset_style: str = "DYNAMIC"
+):
+    """Generate images and automatically save them locally"""
+    try:
+        # Create the generation
+        response = create_generation(
+            prompt=prompt,
+            height=height,
+            width=width,
+            model=model,
+            num_images=num_images,
+            preset_style=preset_style
+        )
+        
+        generation_id = response.get("sdGenerationJob", {}).get("generationId")
+        if not generation_id:
+            raise Exception("Failed to get generation ID from Leonardo API")
+        
+        logger.info(f"Started generation {generation_id} for project {project_id}")
+        
+        return {
+            "generation_id": generation_id,
+            "project_id": project_id,
+            "prompt": prompt,
+            "status": "processing"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to start generation: {e}")
+        raise
